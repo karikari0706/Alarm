@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer/Alarm</title>
+    <style>
+        /* --- 画面全体の基本設定 --- */
+        body { 
+            background-color: #0d1117; 
+            color: #c9d1d9; 
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- 上部のタブメニュー --- */
+        .tab-menu {
+            margin-top: 40px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            background-color: #161b22;
+            padding: 8px;
+            border-radius: 30px;
+            border: 1px solid #30363d;
+        }
+        .tab-btn {
+            background-color: transparent;
+            color: #8b949e;
+            border: none;
+            padding: 10px 25px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active { background-color: #30363d; color: #ffffff; }
+
+        /* --- 各ページの表示・非表示 --- */
+        .page { display: none; flex-direction: column; align-items: center; width: 100%; }
+        .page.active { display: flex; }
+
+        /* --- カードのデザイン（共通） --- */
+        .card {
+            background-color: #161b22; 
+            padding: 50px 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            text-align: center;
+            border: 1px solid #30363d; 
+            margin-bottom: 20px;
+            width: 320px; 
+        }
+
+        /* --- 入力欄エリア（1行に横並び） --- */
+        .input-area { 
+            margin-bottom: 30px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            color: #8b949e; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            gap: 4px; 
+            white-space: nowrap; 
+        }
+        
+        /* タイマー用の普通のプルダウン */
+        select {
+            font-size: 20px; padding: 8px 6px;
+            border: 2px solid #30363d; border-radius: 10px;
+            background-color: #0d1117; color: #c9d1d9; cursor: pointer; outline: none;
+        }
+        select:focus { border-color: #58a6ff; } 
+        
+        /* アラーム用の青いプルダウン（目立つデザインに変更） */
+        select.alarm-select {
+            font-size: 24px;
+            padding: 8px 12px;
+            border: 2px solid #58a6ff; 
+            background-color: #1c2128; 
+            color: #58a6ff; 
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(88, 166, 255, 0.15);
+        }
+        select.alarm-select:focus {
+            border-color: #ffffff;
+            color: #ffffff;
+        }
+        
+        h1 { font-size: 64px; letter-spacing: 4px; margin: 20px 0 40px 0; font-weight: 300; color: #ffffff; }
+        .clock-display { font-size: 56px; letter-spacing: 2px; margin: 0 0 20px 0; font-weight: 300; color: #ffffff; }
+
+        /* --- ボタンのデザイン（共通） --- */
+        .btn-base {
+            font-size: 16px; font-weight: bold; padding: 15px 30px; margin: 5px;
+            border: none; border-radius: 30px; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background-color: #ffffff; color: #1a1a1a; width: 100%; }
+        .btn-primary:hover { background-color: #e0e0e0; transform: scale(1.05); }
+        .btn-primary.running { background-color: #30363d; color: #c9d1d9; }
+        .btn-primary.running:hover { background-color: #484f58; transform: scale(1.05); }
+        .btn-reset { background-color: transparent; color: #6e7681; padding: 15px 10px; width: 100%; }
+        .btn-reset:hover { color: #ffffff; }
+        
+        .alarm-status { margin-top: 20px; font-size: 16px; font-weight: bold; color: #8b949e; }
+    </style>
+</head>
+<body>
+
+    <div class="tab-menu">
+        <button id="tab-timer" class="tab-btn active">タイマー</button>
+        <button id="tab-alarm" class="tab-btn">アラーム</button>
+    </div>
+
+    <div id="page-timer" class="page active">
+        <div class="card">
+            <div class="input-area">
+                <select id="hours"></select><span>時間</span>
+                <select id="minutes"></select><span>分</span>
+                <select id="seconds"></select><span>秒</span>
+            </div>
+            <h1 id="display">00:00:00</h1>
+            <button id="start-stop-btn" class="btn-base btn-primary">START</button>
+            <button id="reset-btn" class="btn-base btn-reset">RESET</button>
+        </div>
+    </div>
+
+    <div id="page-alarm" class="page">
+        <div class="card">
+            <div class="clock-display" id="current-clock">00:00:00</div>
+            
+            <div class="input-area">
+                <select id="alarm-hours" class="alarm-select"></select><span>時</span>
+                <select id="alarm-minutes" class="alarm-select"></select><span>分</span>
+            </div>
+            
+            <button id="alarm-toggle-btn" class="btn-base btn-primary">アラームON</button>
+            <div id="alarm-status" class="alarm-status">セットされていません</div>
+        </div>
+    </div>
+
+    <script>
+        function playSound() {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sine'; 
+            oscillator.frequency.value = 880; 
+            oscillator.connect(audioCtx.destination);
+            oscillator.start();
+            setTimeout(() => { oscillator.stop(); }, 500);
+        }
+
+        // 1. タブ切り替え
+        const tabTimer = document.getElementById('tab-timer');
+        const tabAlarm = document.getElementById('tab-alarm');
+        const pageTimer = document.getElementById('page-timer');
+        const pageAlarm = document.getElementById('page-alarm');
+
+        tabTimer.addEventListener('click', () => {
+            tabTimer.classList.add('active');
+            tabAlarm.classList.remove('active');
+            pageTimer.classList.add('active');
+            pageAlarm.classList.remove('active');
+        });
+
+        tabAlarm.addEventListener('click', () => {
+            tabAlarm.classList.add('active');
+            tabTimer.classList.remove('active');
+            pageAlarm.classList.add('active');
+            pageTimer.classList.remove('active');
+        });
+
+        // 2. タイマー
+        function populateSelect(id, max) {
+            const selectElement = document.getElementById(id);
+            for (let i = 0; i <= max; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = String(i).padStart(2, '0');
+                selectElement.appendChild(option);
+            }
+        }
+        
+        // タイマー用の選択肢生成
+        populateSelect('hours', 99);
+        populateSelect('minutes', 59);
+        populateSelect('seconds', 59);
+
+        // ★新しく追加：アラーム用の選択肢生成（時間は0〜23、分は0〜59まで1回だけ並ぶ）
+        populateSelect('alarm-hours', 23);
+        populateSelect('alarm-minutes', 59);
+
+        let timerInterval; 
+        let totalSeconds = 0; 
+        let isTimerRunning = false; 
+        let timerMode = null; 
+
+        const hoursInput = document.getElementById('hours');
+        const minutesInput = document.getElementById('minutes');
+        const secondsInput = document.getElementById('seconds');
+        const display = document.getElementById('display');
+        const startStopBtn = document.getElementById('start-stop-btn');
+
+        function updateDisplay() {
+            const h = Math.floor(totalSeconds / 3600);
+            const m = Math.floor((totalSeconds % 3600) / 60);
+            const s = totalSeconds % 60;
+            display.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function syncDisplay() {
+            if (!isTimerRunning) {
+                const h = parseInt(hoursInput.value) || 0;
+                const m = parseInt(minutesInput.value) || 0;
+                const s = parseInt(secondsInput.value) || 0;
+                totalSeconds = (h * 3600) + (m * 60) + s;
+                timerMode = null; 
+                updateDisplay();
+            }
+        }
+
+        hoursInput.addEventListener('change', syncDisplay);
+        minutesInput.addEventListener('change', syncDisplay);
+        secondsInput.addEventListener('change', syncDisplay);
+
+        startStopBtn.addEventListener('click', () => {
+            if (isTimerRunning) {
+                clearInterval(timerInterval); 
+                isTimerRunning = false;
+                startStopBtn.textContent = 'START';
+                startStopBtn.classList.remove('running');
+            } else {
+                const h = parseInt(hoursInput.value) || 0;
+                const m = parseInt(minutesInput.value) || 0;
+                const s = parseInt(secondsInput.value) || 0;
+                const inputSeconds = (h * 3600) + (m * 60) + s;
+
+                if (!timerMode) {
+                    timerMode = (inputSeconds === 0) ? 'up' : 'down';
+                    totalSeconds = (inputSeconds === 0) ? 0 : inputSeconds;
+                }
+
+                isTimerRunning = true;
+                startStopBtn.textContent = 'STOP';
+                startStopBtn.classList.add('running');
+
+                timerInterval = setInterval(() => {
+                    if (timerMode === 'up') {
+                        totalSeconds++;
+                        updateDisplay();
+                    } else {
+                        totalSeconds--;
+                        updateDisplay();
+                        if (totalSeconds <= 0) {
+                            clearInterval(timerInterval);
+                            isTimerRunning = false;
+                            timerMode = null; 
+                            startStopBtn.textContent = 'START';
+                            startStopBtn.classList.remove('running');
+                            playSound(); 
+                            alert('タイマーの時間です！'); 
+                        }
+                    }
+                }, 1000);
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerMode = null; 
+            totalSeconds = 0;
+            hoursInput.value = '0'; minutesInput.value = '0'; secondsInput.value = '0';
+            startStopBtn.textContent = 'START';
+            startStopBtn.classList.remove('running');
+            syncDisplay();
+        });
+
+        // 3. アラーム
+        const currentClock = document.getElementById('current-clock');
+        const alarmHoursInput = document.getElementById('alarm-hours'); // 変更
+        const alarmMinutesInput = document.getElementById('alarm-minutes'); // 変更
+        const alarmToggleBtn = document.getElementById('alarm-toggle-btn');
+        const alarmStatus = document.getElementById('alarm-status');
+
+        let isAlarmSet = false;
+        let setAlarmTime = "";
+
+        setInterval(() => {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+
+            currentClock.textContent = `${h}:${m}:${s}`;
+
+            if (isAlarmSet && setAlarmTime === `${h}:${m}`) {
+                if (s === '00') {
+                    playSound();
+                    alert('アラームの時間です！');
+                    
+                    isAlarmSet = false;
+                    alarmToggleBtn.textContent = 'アラームON';
+                    alarmToggleBtn.classList.remove('running');
+                    alarmStatus.textContent = 'セットされていません';
+                    alarmStatus.style.color = '#8b949e';
+                }
+            }
+        }, 1000);
+
+        alarmToggleBtn.addEventListener('click', () => {
+            if (isAlarmSet) {
+                isAlarmSet = false;
+                alarmToggleBtn.textContent = 'アラームON';
+                alarmToggleBtn.classList.remove('running');
+                alarmStatus.textContent = 'セットされていません';
+                alarmStatus.style.color = '#8b949e';
+            } else {
+                // ★プルダウンから「時」と「分」を取得して2桁に整える
+                const h = String(alarmHoursInput.value).padStart(2, '0');
+                const m = String(alarmMinutesInput.value).padStart(2, '0');
+                
+                isAlarmSet = true;
+                setAlarmTime = `${h}:${m}`;
+                
+                alarmToggleBtn.textContent = 'アラームOFF';
+                alarmToggleBtn.classList.add('running'); 
+                alarmStatus.textContent = `${setAlarmTime} に鳴ります`;
+                alarmStatus.style.color = '#58a6ff'; 
+            }
+        });
+    </script>
+</body>
+</html>
